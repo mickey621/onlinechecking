@@ -73,7 +73,7 @@ function renderRows() {
       <td>${escapeHtml(String(item.longitude ?? ''))}</td>
       <td>${escapeHtml(item.device_id || '')}</td>
       <td>${escapeHtml(item.is_suspicious ? '異常' : '正常')}</td>
-      ${isAdmin ? `<td><button class="btn-secondary" type="button" onclick="deleteCheckin('${item.id}', ${JSON.stringify(item.name || '')})">刪除</button></td>` : ''}
+      ${isAdmin ? `<td><button class="btn-secondary delete-checkin-btn" type="button" data-id="${escapeHtml(item.id || '')}" data-name="${escapeHtml(item.name || '')}">刪除</button></td>` : ''}
     </tr>
   `).join('');
 }
@@ -132,6 +132,12 @@ window.deleteCheckin = async function(checkinId, name) {
 if (!isAdmin) {
   document.getElementById('actionHead').style.display = 'none';
 }
+
+document.getElementById('listBody').addEventListener('click', (event) => {
+  const btn = event.target.closest('.delete-checkin-btn');
+  if (!btn) return;
+  deleteCheckin(btn.dataset.id, btn.dataset.name || '');
+});
 
 document.getElementById('reloadBtn').addEventListener('click', loadCheckins);
 document.getElementById('searchName').addEventListener('input', applyFilter);
