@@ -1,0 +1,12 @@
+{
+  "name": "attendance-redeploy-full-v2",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "hash": "node scripts/hash-password.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.8",
+    "bcryptjs": "^2.4.3"
+  }
+}

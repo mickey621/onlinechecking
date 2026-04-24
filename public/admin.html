@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>管理員頁面</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+  <style>
+    .session-list { display: grid; gap: 12px; margin-top: 16px; }
+    .session-item {
+      border: 1px solid #d7e2ef;
+      border-radius: 14px;
+      padding: 14px;
+      background: #f9fcff;
+    }
+    .session-item h4 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+    .session-meta {
+      color: #627387;
+      font-size: 13px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+    .session-item .actions {
+      margin-top: 10px;
+    }
+    .qr-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .qr-card {
+      width: min(100%, 720px);
+      display: flex;
+      justify-content: center;
+      background: #fff;
+      padding: 22px;
+      border-radius: 24px;
+      box-shadow: 0 14px 34px rgba(16,54,92,0.12);
+      border: 1px solid #d7e2ef;
+    }
+    #qrCanvas, #fullscreenQrCanvas {
+      width: min(100%, 640px);
+      height: auto;
+      background: #fff;
+      border-radius: 12px;
+    }
+    .qr-tools { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .qr-caption { color: #627387; font-size: 13px; line-height: 1.6; text-align: center; margin: 0; }
+    .fullscreen-qr-overlay { position: fixed; inset: 0; z-index: 9999; display: none; align-items: center; justify-content: center; background: radial-gradient(circle at top, #fff 0%, #eef4f9 45%, #dcebf7 100%); padding: 28px; }
+    .fullscreen-qr-overlay.active { display: flex; }
+    .fullscreen-qr-panel { width: min(96vw, 1180px); min-height: min(92vh, 980px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: rgba(255,255,255,0.92); border: 1px solid #d7e2ef; border-radius: 32px; box-shadow: 0 24px 70px rgba(16,54,92,0.20); padding: 26px; position: relative; }
+    .fullscreen-qr-title { margin: 0; text-align: center; font-size: clamp(28px, 4vw, 52px); line-height: 1.15; color: #1b2b3a; }
+    .fullscreen-qr-subtitle { margin: 0; color: #627387; font-size: clamp(15px, 1.8vw, 22px); text-align: center; }
+    .fullscreen-qr-card { width: min(82vh, 82vw, 760px); aspect-ratio: 1 / 1; display: flex; align-items: center; justify-content: center; background: #fff; padding: clamp(18px, 3vw, 34px); border-radius: 30px; box-shadow: 0 16px 44px rgba(16,54,92,0.15); border: 1px solid #d7e2ef; }
+    #fullscreenQrCanvas { width: 100%; height: 100%; }
+    .fullscreen-close { position: absolute; right: 22px; top: 18px; }
+    .fullscreen-countdown { font-size: clamp(18px, 2.4vw, 30px); font-weight: 800; color: #0a4d8a; margin: 0; }
+    @media (max-width: 700px) { .fullscreen-qr-overlay { padding: 10px; } .fullscreen-qr-panel { min-height: 96vh; border-radius: 22px; padding: 18px; } .fullscreen-close { right: 14px; top: 12px; } }
+  </style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand brand-with-logo">
+    <img src="/logo.svg" alt="logo" class="brand-logo" />
+    <span>線上簽到系統</span>
+  </div>
+</header>
+
+<main class="page">
+  <section class="hero panel">
+    <div class="panel-body">
+      <div class="eyebrow">Admin Console</div>
+      <h1>管理員頁面</h1>
+      <p>建立場次後可產生活動級大尺寸 QR Code，可一般顯示、全螢幕展示，也可從已開場次清單直接載入既有 QR。</p>
+    </div>
+  </section>
+
+  <section class="content-grid">
+    <section class="panel">
+      <div class="panel-body">
+        <div class="section-title-row">
+          <h2>建立場次</h2>
+          <span class="section-tag">Session Setup</span>
+        </div>
+
+        <label class="field-label">場次名稱</label>
+        <input id="title" placeholder="例如：4/20 研習會" />
+
+        <label class="field-label">場地緯度</label>
+        <input id="latitude" value="24.183451342219065" />
+
+        <label class="field-label">場地經度</label>
+        <input id="longitude" value="120.61699252308144" />
+
+        <label class="field-label">允許誤差範圍（公尺）</label>
+        <input id="radiusMeters" type="number" value="500" />
+
+        <label class="field-label">GPS 定位要求</label>
+        <label style="display:flex;align-items:center;gap:10px;margin:8px 0 16px;color:#334155;">
+          <input id="requireGps" type="checkbox" checked style="width:auto;" />
+          <span>簽到時需要開啟手機 GPS 定位並檢查距離</span>
+        </label>
+        <p class="helper-text" style="margin-top:-8px;">取消勾選後，使用者即使未開啟手機 GPS 也可以簽到。</p>
+
+        <label class="field-label">開始時間</label>
+        <input id="startsAt" type="datetime-local" />
+
+        <label class="field-label">結束時間</label>
+        <input id="endsAt" type="datetime-local" />
+
+        <div class="actions">
+          <button id="openBtn" class="btn-primary">開啟簽到場次</button>
+        </div>
+
+        <p id="status" class="status-text"></p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-body">
+        <div class="section-title-row">
+          <h2>動態 QR Code</h2>
+          <span class="section-tag">活動級顯示 / 30 秒有效</span>
+        </div>
+
+        <div class="qr-wrap">
+          <div class="qr-card"><canvas id="qrCanvas" width="640" height="640"></canvas></div>
+          <div class="qr-tools">
+            <button id="fullscreenQrBtn" class="btn-primary" type="button">全螢幕 QR</button>
+            <button id="downloadQrBtn" class="btn-secondary" type="button">下載 QR 圖</button>
+          </div>
+          <p id="countdown" class="status-text">尚未產生</p>
+          <p class="qr-caption">QR 使用高容錯 H 等級與大尺寸輸出，適合投影、螢幕展示與現場活動掃描。</p>
+        </div>
+
+        <pre id="sessionInfo" class="codebox">建立場次或點選已開場次後會顯示資訊</pre>
+      </div>
+    </section>
+  </section>
+
+  <section class="panel" style="margin-top: 22px;">
+    <div class="panel-body">
+      <div class="section-title-row">
+        <h2>已開場次</h2>
+        <div class="actions">
+          <button id="refreshSessionsBtn" class="btn-secondary" type="button">重新整理場次</button>
+        </div>
+      </div>
+      <p id="sessionListStatus" class="status-text">載入中...</p>
+      <div id="sessionList" class="session-list"></div>
+    </div>
+  </section>
+</main>
+
+<div id="fullscreenQrOverlay" class="fullscreen-qr-overlay" aria-hidden="true">
+  <div class="fullscreen-qr-panel">
+    <button id="closeFullscreenQrBtn" class="btn-secondary fullscreen-close" type="button">關閉</button>
+    <h2 id="fullscreenQrTitle" class="fullscreen-qr-title">線上簽到 QR Code</h2>
+    <p class="fullscreen-qr-subtitle">請使用手機相機掃描完成簽到</p>
+    <div class="fullscreen-qr-card"><canvas id="fullscreenQrCanvas" width="960" height="960"></canvas></div>
+    <p id="fullscreenCountdown" class="fullscreen-countdown">尚未產生</p>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem('authToken');
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+if (!token || user.role !== 'admin') location.href = '/';
+
+let currentSessionId = localStorage.getItem('currentSessionId') || null;
+let currentSessionTitle = '線上簽到 QR Code';
+let latestQrUrl = '';
+let timer = null;
+let loop = null;
+
+function formatTaipeiTime(value) {
+  return value ? new Date(value).toLocaleString('zh-TW', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }) : '';
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function getSessionDisplayStatus(session) {
+  const now = Date.now();
+  const startMs = new Date(session.starts_at).getTime();
+  const endMs = new Date(session.ends_at).getTime();
+
+  if (Number.isFinite(startMs) && now < startMs) return '準備中';
+  if (Number.isFinite(endMs) && now > endMs) return '已結束';
+  return '開始中';
+}
+
+function drawQrWithLogoToCanvas(canvasId, text, size = 640) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  canvas.width = size;
+  canvas.height = size;
+  new QRious({ element: canvas, size, value: text, level: 'H' });
+  const logo = new Image();
+  logo.src = '/logo.svg';
+  logo.onload = () => {
+    const logoSize = canvas.width * 0.16;
+    const padding = canvas.width * 0.035;
+    const boxSize = logoSize + padding * 2;
+    const x = (canvas.width - boxSize) / 2;
+    const y = (canvas.height - boxSize) / 2;
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, boxSize, boxSize, canvas.width * 0.025);
+    else ctx.rect(x, y, boxSize, boxSize);
+    ctx.fill();
+    ctx.drawImage(logo, x + padding, y + padding, logoSize, logoSize);
+    ctx.restore();
+  };
+}
+
+function drawQrWithLogo(text) {
+  drawQrWithLogoToCanvas('qrCanvas', text, 640);
+  drawQrWithLogoToCanvas('fullscreenQrCanvas', text, 960);
+}
+function setQrCountdownText(text) {
+  document.getElementById('countdown').textContent = text;
+  document.getElementById('fullscreenCountdown').textContent = text;
+}
+function openFullscreenQr() {
+  if (!latestQrUrl) {
+    document.getElementById('status').textContent = '請先建立或選擇場次產生 QR Code';
+    document.getElementById('status').className = 'status-text status-error';
+    return;
+  }
+  document.getElementById('fullscreenQrTitle').textContent = currentSessionTitle || '線上簽到 QR Code';
+  document.getElementById('fullscreenQrOverlay').classList.add('active');
+  document.getElementById('fullscreenQrOverlay').setAttribute('aria-hidden', 'false');
+  drawQrWithLogo(latestQrUrl);
+}
+function closeFullscreenQr() {
+  document.getElementById('fullscreenQrOverlay').classList.remove('active');
+  document.getElementById('fullscreenQrOverlay').setAttribute('aria-hidden', 'true');
+}
+function downloadCurrentQr() {
+  if (!latestQrUrl) {
+    document.getElementById('status').textContent = '請先建立或選擇場次產生 QR Code';
+    document.getElementById('status').className = 'status-text status-error';
+    return;
+  }
+  const canvas = document.getElementById('fullscreenQrCanvas');
+  drawQrWithLogoToCanvas('fullscreenQrCanvas', latestQrUrl, 960);
+  setTimeout(() => {
+    const link = document.createElement('a');
+    const safeTitle = (currentSessionTitle || 'checkin-qr').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 50);
+    link.download = `${safeTitle}-qr.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }, 150);
+}
+
+async function openSession() {
+  const payload = {
+    title: document.getElementById('title').value.trim(),
+    latitude: Number(document.getElementById('latitude').value),
+    longitude: Number(document.getElementById('longitude').value),
+    radiusMeters: Number(document.getElementById('radiusMeters').value),
+    requireGps: document.getElementById('requireGps').checked,
+    startsAt: new Date(document.getElementById('startsAt').value).toISOString(),
+    endsAt: new Date(document.getElementById('endsAt').value).toISOString()
+  };
+
+  const res = await fetch('/api/open-session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '建立失敗');
+
+  loadSessionIntoQr(data.session);
+  document.getElementById('status').textContent = '場次已建立';
+  document.getElementById('status').className = 'status-text status-success';
+  loadSessions();
+}
+
+function loadSessionIntoQr(session) {
+  currentSessionId = session.id;
+  currentSessionTitle = session.title || '線上簽到 QR Code';
+  localStorage.setItem('currentSessionId', currentSessionId);
+  document.getElementById('sessionInfo').textContent = JSON.stringify(session, null, 2);
+  startQrLoop();
+}
+
+async function refreshQr() {
+  if (!currentSessionId) return;
+
+  const res = await fetch(`/api/generate-qr?sessionId=${encodeURIComponent(currentSessionId)}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'QR 產生失敗');
+
+  const qrUrl = `${window.location.origin}/checkin.html?token=${encodeURIComponent(data.qrToken)}`;
+  latestQrUrl = qrUrl;
+  drawQrWithLogo(qrUrl);
+
+  let seconds = data.expiresInSeconds;
+  setQrCountdownText(`QR 將在 ${seconds} 秒後更新`);
+  if (timer) clearInterval(timer);
+  timer = setInterval(() => {
+    seconds -= 1;
+    setQrCountdownText(`QR 將在 ${Math.max(seconds, 0)} 秒後更新`);
+  }, 1000);
+}
+
+function startQrLoop() {
+  if (loop) clearInterval(loop);
+  refreshQr();
+  loop = setInterval(refreshQr, 10000);
+}
+
+async function loadSessions() {
+  const box = document.getElementById('sessionList');
+  const status = document.getElementById('sessionListStatus');
+  status.textContent = '載入中...';
+  box.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/list-sessions?status=open', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '讀取場次失敗');
+
+    if (!data.length) {
+      status.textContent = '目前沒有已開場次';
+      return;
+    }
+
+    status.textContent = `共 ${data.length} 個已開場次`;
+
+    box.innerHTML = data.map(session => {
+      const checkinCount = Array.isArray(session.checkins) && session.checkins.length
+        ? Number(session.checkins[0].count || 0)
+        : 0;
+
+      return `
+      <div class="session-item">
+        <h4>${escapeHtml(session.title || '未命名場次')}</h4>
+        <div class="session-meta">狀態：${escapeHtml(getSessionDisplayStatus(session))}
+簽到人數：${escapeHtml(String(checkinCount))} 人
+開始：${escapeHtml(formatTaipeiTime(session.starts_at))}
+結束：${escapeHtml(formatTaipeiTime(session.ends_at))}
+GPS 定位：${session.require_gps === false ? '已關閉' : '需開啟'}
+半徑：${escapeHtml(String(session.radius_meters || ''))} 公尺
+座標：${escapeHtml(String(session.latitude))}, ${escapeHtml(String(session.longitude))}</div>
+        <div class="actions">
+          <button class="btn-primary" type="button" onclick="selectSession('${session.id}')">顯示 QR Code</button>
+          <button class="btn-secondary" type="button" onclick="viewSessionList('${session.id}')">查看名單</button>
+        </div>
+      </div>
+    `;
+    }).join('');
+  } catch (err) {
+    status.textContent = err.message;
+  }
+}
+
+window.selectSession = async function(sessionId) {
+  try {
+    const res = await fetch(`/api/list-sessions?sessionId=${encodeURIComponent(sessionId)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '讀取場次失敗');
+    const session = Array.isArray(data) ? data[0] : data;
+    if (!session) throw new Error('找不到場次');
+    loadSessionIntoQr(session);
+    document.getElementById('status').textContent = '已載入場次並顯示 QR Code';
+    document.getElementById('status').className = 'status-text status-success';
+  } catch (err) {
+    document.getElementById('status').textContent = err.message;
+    document.getElementById('status').className = 'status-text status-error';
+  }
+};
+
+window.viewSessionList = function(sessionId) {
+  location.href = `/admin-list.html?sessionId=${encodeURIComponent(sessionId)}`;
+};
+
+document.getElementById('openBtn').addEventListener('click', async () => {
+  try {
+    await openSession();
+  } catch (err) {
+    document.getElementById('status').textContent = err.message;
+    document.getElementById('status').className = 'status-text status-error';
+  }
+});
+
+document.getElementById('refreshSessionsBtn').addEventListener('click', loadSessions);
+document.getElementById('fullscreenQrBtn').addEventListener('click', openFullscreenQr);
+document.getElementById('closeFullscreenQrBtn').addEventListener('click', closeFullscreenQr);
+document.getElementById('downloadQrBtn').addEventListener('click', downloadCurrentQr);
+document.getElementById('fullscreenQrOverlay').addEventListener('click', (event) => { if (event.target.id === 'fullscreenQrOverlay') closeFullscreenQr(); });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeFullscreenQr(); });
+
+if (currentSessionId) {
+  document.getElementById('status').textContent = '已載入最近場次，可直接顯示 QR 或查看名單';
+}
+
+loadSessions();
+</script>
+</body>
+</html>

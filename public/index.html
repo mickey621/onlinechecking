@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>線上簽到系統</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand brand-with-logo">
+    <img src="/logo.svg" alt="logo" class="brand-logo" />
+    <span>線上簽到系統</span>
+  </div>
+</header>
+<main class="page">
+  <section class="hero panel"><div class="panel-body"><div class="eyebrow">Admin Login</div><h1>管理者登入</h1><p>管理者登入後可建立簽到場次、產生 30 秒有效的 QR Code，並查看公開簽到名單。</p></div></section>
+  <section class="login-grid">
+    <section class="panel"><div class="panel-body">
+      <div class="section-title-row"><h2>登入</h2><span class="section-tag">帳號入口</span></div>
+      <label class="field-label">帳號</label><input id="userCode" placeholder="管理員帳號" />
+      <label class="field-label">密碼</label><input id="password" type="password" placeholder="密碼" />
+      <div class="actions"><button id="loginBtn" class="btn-primary">登入</button></div>
+      <p id="msg" class="status-text"></p>
+    </div></section>
+    <aside class="panel"><div class="panel-body"><h3>本版功能</h3><ul class="info-list"><li>管理者登入驗證</li><li>查看簽到名單不用驗證</li><li>QR Code 30 秒期限</li><li>GPS 依場次半徑驗證</li><li>Excel 匯出與即時刷新</li></ul></div></aside>
+  </section>
+</main>
+<script>
+async function login() {
+  const userCode = document.getElementById('userCode').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const msg = document.getElementById('msg');
+  if (!userCode || !password) { msg.textContent = '請輸入帳號與密碼'; msg.className = 'status-text status-error'; return; }
+  msg.textContent = '登入中...'; msg.className = 'status-text';
+  try {
+    const res = await fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userCode, password }) });
+    const data = await res.json(); if (!res.ok) throw new Error(data.error || '登入失敗');
+    localStorage.setItem('authToken', data.token); localStorage.setItem('user', JSON.stringify(data.user)); location.href='/admin.html';
+  } catch (err) { msg.textContent = err.message; msg.className = 'status-text status-error'; }
+}
+document.getElementById('loginBtn').addEventListener('click', login);
+</script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>簽到名單</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand brand-with-logo">
+    <img src="/logo.svg" alt="logo" class="brand-logo" />
+    <span>線上簽到系統</span>
+  </div>
+</header>
+<main class="page">
+  <section class="hero panel"><div class="panel-body"><div class="eyebrow">Attendance List</div><h1>簽到名單</h1><p>此頁會依 sessionId 顯示該場次的簽到資料，支援自動刷新、姓名搜尋與 Excel 匯出；若為管理員登入狀態，還可刪除個別簽到紀錄。</p></div></section>
+  <section class="panel"><div class="panel-body">
+    <div class="section-title-row"><h2>簽到紀錄</h2><div class="actions"><button id="reloadBtn" class="btn-secondary" type="button">重新整理</button><button id="exportBtn" class="btn-secondary" type="button">匯出 Excel</button><button id="backBtn" class="btn-primary" type="button">返回管理頁</button></div></div>
+    <label class="field-label" for="searchName">搜尋姓名</label>
+    <input id="searchName" placeholder="輸入姓名關鍵字" />
+    <p id="summary" class="status-text">載入中...</p>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>姓名</th><th>時間</th><th>緯度</th><th>經度</th><th>裝置</th><th>狀態</th><th id="actionHead">操作</th></tr></thead><tbody id="listBody"><tr><td colspan="7">載入中...</td></tr></tbody></table></div>
+  </div></section>
+</main>
+<script>
+const params = new URLSearchParams(window.location.search);
+const sessionId = params.get('sessionId') || localStorage.getItem('currentSessionId');
+const token = localStorage.getItem('authToken');
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+const isAdmin = Boolean(token && user && user.role === 'admin');
+let lastData = [];
+let filteredData = [];
+let loading = false;
+
+function escapeHtml(str){ return String(str).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
+function formatTaipeiTime(value){ return value ? new Date(value).toLocaleString('zh-TW',{ timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }) : ''; }
+
+function updateSummary(message) {
+  const summary = document.getElementById('summary');
+  const keyword = document.getElementById('searchName').value.trim();
+
+  if (message) {
+    summary.textContent = message;
+    return;
+  }
+
+  const total = lastData.length;
+  const visible = filteredData.length;
+  summary.textContent = keyword
+    ? `總簽到人數 ${total} 人，目前顯示 ${visible} 筆符合「${keyword}」的資料${isAdmin ? '，可刪除個別紀錄' : ''}`
+    : `總簽到人數 ${total} 人，頁面每 5 秒自動刷新${isAdmin ? '，可刪除個別紀錄' : ''}`;
+}
+
+function renderRows() {
+  const tbody = document.getElementById('listBody');
+  if (!lastData.length) {
+    tbody.innerHTML = `<tr><td colspan="${isAdmin ? 7 : 6}">目前還沒有簽到紀錄</td></tr>`;
+    return;
+  }
+
+  if (!filteredData.length) {
+    tbody.innerHTML = `<tr><td colspan="${isAdmin ? 7 : 6}">查無符合姓名的簽到紀錄</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filteredData.map(item => `
+    <tr>
+      <td>${escapeHtml(item.name || '')}</td>
+      <td>${escapeHtml(formatTaipeiTime(item.checkin_time))}</td>
+      <td>${escapeHtml(String(item.latitude ?? ''))}</td>
+      <td>${escapeHtml(String(item.longitude ?? ''))}</td>
+      <td>${escapeHtml(item.device_id || '')}</td>
+      <td>${escapeHtml(item.is_suspicious ? '異常' : '正常')}</td>
+      ${isAdmin ? `<td><button class="btn-secondary" type="button" onclick="deleteCheckin('${item.id}', ${JSON.stringify(item.name || '')})">刪除</button></td>` : ''}
+    </tr>
+  `).join('');
+}
+
+function applyFilter() {
+  const keyword = document.getElementById('searchName').value.trim().toLowerCase();
+  filteredData = keyword
+    ? lastData.filter(item => String(item.name || '').toLowerCase().includes(keyword))
+    : [...lastData];
+  renderRows();
+  updateSummary();
+}
+
+async function loadCheckins(){
+  const summary=document.getElementById('summary');
+  if(!sessionId){ summary.textContent='缺少 sessionId'; document.getElementById('listBody').innerHTML=`<tr><td colspan="${isAdmin ? 7 : 6}">找不到場次資訊</td></tr>`; return; }
+  if (loading) return;
+  loading = true;
+  try{
+    const res=await fetch(`/api/get-checkins?sessionId=${encodeURIComponent(sessionId)}`); const data=await res.json(); if(!res.ok) throw new Error(data.error || '讀取失敗');
+    lastData=data||[];
+    applyFilter();
+  }catch(err){ summary.textContent=err.message; document.getElementById('listBody').innerHTML=`<tr><td colspan="${isAdmin ? 7 : 6}">讀取失敗</td></tr>`; }
+  finally { loading = false; }
+}
+
+window.deleteCheckin = async function(checkinId, name) {
+  if (!isAdmin) return;
+  if (!confirm(`確定要刪除 ${name || '這筆'} 簽到紀錄嗎？`)) return;
+
+  const summary = document.getElementById('summary');
+  const oldText = summary.textContent;
+  summary.textContent = '刪除中...';
+  try {
+    const res = await fetch('/api/delete-checkin', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ checkinId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '刪除失敗');
+    lastData = lastData.filter(item => item.id !== checkinId);
+    filteredData = filteredData.filter(item => item.id !== checkinId);
+    renderRows();
+    updateSummary(`${data.deleted?.name || name || '該筆紀錄'} 已刪除`);
+    setTimeout(loadCheckins, 300);
+  } catch (err) {
+    summary.textContent = err.message;
+    setTimeout(() => { summary.textContent = oldText; }, 2000);
+  }
+}
+
+if (!isAdmin) {
+  document.getElementById('actionHead').style.display = 'none';
+}
+
+document.getElementById('reloadBtn').addEventListener('click', loadCheckins);
+document.getElementById('searchName').addEventListener('input', applyFilter);
+document.getElementById('backBtn').addEventListener('click', ()=>location.href='/admin.html');
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(!filteredData.length){ alert('沒有資料可匯出'); return; }
+  const sheetData=filteredData.map(x=>({ 姓名:x.name||'', 時間:formatTaipeiTime(x.checkin_time), 緯度:x.latitude??'', 經度:x.longitude??'', 裝置:x.device_id||'', 狀態:x.is_suspicious?'異常':'正常' }));
+  const ws=XLSX.utils.json_to_sheet(sheetData); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, '簽到名單'); XLSX.writeFile(wb, 'checkins.xlsx');
+});
+loadCheckins(); setInterval(loadCheckins, 5000);
+</script>
+</body>
+</html>

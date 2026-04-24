@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>現場簽到</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand brand-with-logo">
+    <img src="/logo.svg" alt="logo" class="brand-logo" />
+    <span>線上簽到系統</span>
+  </div>
+</header>
+
+<main class="page">
+  <section class="hero panel">
+    <div class="panel-body">
+      <div class="eyebrow">Check-in</div>
+      <h1>現場簽到</h1>
+      <p>請直接用手機相機掃描管理頁 QR Code。進入本頁後，輸入員工編號並送出即可。</p>
+      <p>⚠️切勿代他人簽到，同一裝置只計最後簽到者資訊</p>
+    </div>
+  </section>
+
+  <section class="content-grid">
+    <section class="panel">
+      <div class="panel-body">
+        <div class="section-title-row">
+          <h2>簽到</h2>
+          <span class="section-tag">No Login</span>
+        </div>
+
+        <label class="field-label">員工編號</label>
+        <input id="checkinName" placeholder="請輸入員工編號" />
+
+        <div class="manual-box">
+          <label class="field-label">QR Token</label>
+          <input id="qrToken" placeholder="掃描後會自動帶入，也可手動貼上" />
+        </div>
+
+        <div class="actions">
+          <button id="checkinBtn" class="btn-primary">簽到</button>
+        </div>
+
+        <p class="helper-text">※ 簽到狀態將於下方資訊區域顯示 🔽</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-body">
+        <div id="statusBox" class="big-status waiting">等待送出...</div>
+        <div id="detailBox" class="status-text" style="margin-top:16px;"></div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script>
+let isSubmitting = false;
+
+function setStatus(msg, type = 'waiting', detail = '') {
+  const box = document.getElementById('statusBox');
+  const detailBox = document.getElementById('detailBox');
+  box.textContent = msg;
+  box.className = 'big-status ' + type;
+  detailBox.textContent = detail || '';
+}
+
+function beep(success = true) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = success ? 880 : 300;
+    osc.connect(ctx.destination);
+    osc.start();
+    setTimeout(() => osc.stop(), 120);
+  } catch {}
+}
+
+function vibrate(type = 'success') {
+  if (navigator.vibrate) {
+    navigator.vibrate(type === 'success' ? [100] : [200,100,200]);
+  }
+}
+
+function extractToken(input) {
+  if (!input) return '';
+  try {
+    const url = new URL(input);
+    return url.searchParams.get('token') || input;
+  } catch {
+    return input;
+  }
+}
+
+function getDeviceId() {
+  let id = localStorage.getItem('deviceId');
+  if (!id) {
+    id = 'dev_' + crypto.randomUUID();
+    localStorage.setItem('deviceId', id);
+  }
+  return id;
+}
+
+function formatTaipeiTime(value) {
+  return value ? new Date(value).toLocaleString('zh-TW', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }) : '';
+}
+
+async function getPosition() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve(pos.coords),
+      (err) => reject(err),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  });
+}
+
+async function submitCheckin() {
+  if (isSubmitting) return;
+  isSubmitting = true;
+
+  try {
+    const name = document.getElementById('checkinName').value.trim();
+    if (!name) throw new Error('請輸入員工編號或姓名');
+
+    const qrToken = extractToken(document.getElementById('qrToken').value.trim());
+    if (!qrToken) throw new Error('缺少 QR token，請重新掃碼');
+
+    setStatus('處理中...', 'waiting');
+
+    const submitToServer = async (coords = null) => {
+      const body = {
+        qrToken,
+        name,
+        deviceId: getDeviceId()
+      };
+      if (coords) {
+        body.latitude = coords.latitude;
+        body.longitude = coords.longitude;
+      }
+
+      const response = await fetch('/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      const payload = await response.json();
+      return { response, payload };
+    };
+
+    // 先不要求 GPS 送出；若該場次需要 GPS，後端會回覆 GPS_REQUIRED，再請手機取得定位後重送。
+    let { response: res, payload: data } = await submitToServer();
+
+    if (res.status === 428 && data.error === 'GPS_REQUIRED') {
+      setStatus('此場次需要 GPS，正在取得定位...', 'waiting');
+      const coords = await getPosition();
+      ({ response: res, payload: data } = await submitToServer(coords));
+    }
+
+    if (res.status === 409 && data.alreadyChecked) {
+      setStatus('你已經打過卡', 'error', `打卡時間：${formatTaipeiTime(data.checkinTime)}`);
+      beep(false);
+      vibrate('error');
+      return;
+    }
+
+    if (!res.ok) {
+      const errorMessage = data.error === 'GPS_REQUIRED' ? '此場次需要 GPS 定位，請開啟手機定位後再試' : (data.error || '簽到失敗');
+      throw new Error(errorMessage);
+    }
+
+    setStatus('簽到成功', 'success', data.requireGps === false ? '本場次未要求 GPS 定位。' : '');
+    beep(true);
+    vibrate('success');
+    document.getElementById('checkinName').value = '';
+  } catch (err) {
+    setStatus('❌ ' + err.message, 'error');
+    beep(false);
+    vibrate('error');
+  } finally {
+    isSubmitting = false;
+  }
+}
+
+document.getElementById('checkinBtn').addEventListener('click', submitCheckin);
+
+const params = new URLSearchParams(location.search);
+const tokenFromUrl = params.get('token');
+if (tokenFromUrl) {
+  document.getElementById('qrToken').value = tokenFromUrl;
+  setStatus('已帶入 QR token，請輸入員工編號或姓名後送出', 'waiting');
+}
+</script>
+</body>
+</html>
