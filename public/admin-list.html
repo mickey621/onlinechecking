@@ -109,12 +109,12 @@ window.deleteCheckin = async function(checkinId, name) {
   summary.textContent = '刪除中...';
   try {
     const res = await fetch('/api/delete-checkin', {
-      method: 'DELETE',
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ checkinId })
+      body: JSON.stringify({ checkinId, id: checkinId, sessionId })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '刪除失敗');

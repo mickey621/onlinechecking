@@ -15,8 +15,16 @@ exports.handler = async (event) => {
       return json(401, { error: '未授權，請重新登入' });
     }
 
-    const body = JSON.parse(event.body || '{}');
-    const checkinId = body.checkinId || (event.queryStringParameters && event.queryStringParameters.checkinId);
+    let body = {};
+    try {
+      body = event.body ? JSON.parse(event.body) : {};
+    } catch (_) {
+      body = {};
+    }
+
+    const qs = event.queryStringParameters || {};
+    const checkinId = body.checkinId || body.id || qs.checkinId || qs.id;
+    const sessionId = body.sessionId || qs.sessionId;
     if (!checkinId) return json(400, { error: '缺少 checkinId' });
 
     const supabase = getSupabaseAdmin();
@@ -27,7 +35,10 @@ exports.handler = async (event) => {
       .maybeSingle();
 
     if (existingError) throw existingError;
-    if (!existing) return json(404, { error: '找不到簽到紀錄' });
+    if (!existing) return json(404, { error: '找不到簽到紀錄，可能已被刪除' });
+    if (sessionId && String(existing.session_id) !== String(sessionId)) {
+      return json(400, { error: '簽到紀錄與目前場次不一致，已停止刪除' });
+    }
 
     const { error: deleteError } = await supabase
       .from('checkins')

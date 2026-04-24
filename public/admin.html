@@ -148,6 +148,10 @@
       <div class="section-title-row">
         <h2>已開場次</h2>
         <div class="actions">
+          <label style="display:flex;align-items:center;gap:8px;color:#334155;font-size:14px;">
+            <input id="hideEndedSessions" type="checkbox" checked style="width:auto;" />
+            <span>不顯示已結束場次</span>
+          </label>
           <button id="refreshSessionsBtn" class="btn-secondary" type="button">重新整理場次</button>
         </div>
       </div>
@@ -353,14 +357,25 @@ async function loadSessions() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '讀取場次失敗');
 
-    if (!data.length) {
-      status.textContent = '目前沒有已開場次';
+    const allSessions = Array.isArray(data) ? data : [];
+    const hideEnded = document.getElementById('hideEndedSessions')?.checked !== false;
+    const visibleSessions = hideEnded
+      ? allSessions.filter(session => getSessionDisplayStatus(session) !== '已結束')
+      : allSessions;
+
+    if (!visibleSessions.length) {
+      status.textContent = hideEnded
+        ? `目前沒有未結束的已開場次；共隱藏 ${allSessions.length} 個已結束場次`
+        : '目前沒有已開場次';
       return;
     }
 
-    status.textContent = `共 ${data.length} 個已開場次`;
+    const hiddenCount = allSessions.length - visibleSessions.length;
+    status.textContent = hideEnded
+      ? `共 ${visibleSessions.length} 個未結束場次，已隱藏 ${hiddenCount} 個已結束場次`
+      : `共 ${visibleSessions.length} 個已開場次`;
 
-    box.innerHTML = data.map(session => {
+    box.innerHTML = visibleSessions.map(session => {
       const checkinCount = Array.isArray(session.checkins) && session.checkins.length
         ? Number(session.checkins[0].count || 0)
         : 0;
@@ -419,6 +434,7 @@ document.getElementById('openBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('refreshSessionsBtn').addEventListener('click', loadSessions);
+document.getElementById('hideEndedSessions').addEventListener('change', loadSessions);
 document.getElementById('fullscreenQrBtn').addEventListener('click', openFullscreenQr);
 document.getElementById('closeFullscreenQrBtn').addEventListener('click', closeFullscreenQr);
 document.getElementById('downloadQrBtn').addEventListener('click', downloadCurrentQr);
